@@ -7,7 +7,7 @@ Open terminal in root project dir and execute: `cd ./env && docker-compose up -d
 This step is required to deploy Kafka local env.
 You can skip it, if you already have custom Kafka deployed, but make sure to update connection props if needed.
 
-## Start application
+## Steps to reproduce
 
 1. Open [ReactorKafkaTestApplication](src/main/java/com/example/reactorkafkatest/ReactorKafkaTestApplication.java) class
 2. In kafkaReceiversRunner choose one of reproducible Kafka event handling methods
