@@ -1,0 +1,42 @@
+version: '3.9'
+
+services:
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    logging:
+      driver: fluentd
+    ports:
+      - "2181:2181"
+    depends_on:
+      fluentd:
+        condition: service_healthy
+
+  kafka:
+    image: wurstmeister/kafka
+    ports:
+      - "9092:9092"
+    logging:
+      driver: fluentd
+    volumes:
+      - ./kafka:/opt/kafka/security
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    depends_on:
+      zookeeper:
+        condition: service_started
+      fluentd:
+        condition: service_healthy
+
+  fluentd:
+    image: ajaxsystem/dockers:fluentd-latest
+    volumes:
+      - ./logs:/fluentd/log
+    ports:
+      - "24224:24224"
+    healthcheck:
+      test: nc -vz localhost 24224
+      interval: 1s
+      timeout: 1s
+      retries: 5
