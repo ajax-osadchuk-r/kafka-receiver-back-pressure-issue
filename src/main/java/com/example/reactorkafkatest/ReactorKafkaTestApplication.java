@@ -92,21 +92,31 @@ public class ReactorKafkaTestApplication {
             this::handleWithMonoRetry;
 
         return args -> {
-            log.info("*************************************************************************************");
-            log.info("STARTING RECEIVER 1");
-            log.info("*************************************************************************************");
-            startReceiver(handlingFunction);
-            latch.await(); // wait till receiver1 will join to the group
-            Thread.sleep(10_000);// wait a bit to handle some events on receiver1
-            log.info("*************************************************************************************");
-            log.info("STARTING RECEIVER 2");
-            log.info("*************************************************************************************");
-            startReceiver(handlingFunction);// start receiver2 and observe debug log on rebalance:
+            startReceiver("RECEIVER_1", handlingFunction);
+
+            // wait till receiver1 will join to the group
+            latch.await();
+
+            // wait a bit to handle some events on receiver1
+            Thread.sleep(10_000);
+
+            // start receiver2 and observe debug log on rebalance:
             // "Rebalancing; waiting for N records in pipeline"
+            startReceiver("RECEIVER_2", handlingFunction);
+            // After rebalance verify by event key that some events were processed on both consumers, e.g.:
+            // "RECEIVER_1:: Started handling of event#73"
+            // "RECEIVER_2:: Started handling of event#73"
         };
     }
 
-    private void startReceiver(Function<ReceiverRecord<String, String>, Mono<ReceiverRecord<String, String>>> handlingFunction) {
+    private void startReceiver(
+        String receiverName,
+        Function<ReceiverRecord<String, String>, Mono<ReceiverRecord<String, String>>> handlingFunction
+    ) {
+        log.info("*************************************************************************************");
+        log.info("STARTING {}", receiverName);
+        log.info("*************************************************************************************");
+
         var receiverOptions = ReceiverOptions.<String, String>create(
                 Map.of(
                     ConsumerConfig.CLIENT_ID_CONFIG, "test-consumer-" + RANDOM.nextInt(),
@@ -127,9 +137,11 @@ public class ReactorKafkaTestApplication {
 
         KafkaReceiver.create(receiverOptions)
             .receive()
-            .groupBy(rec -> rec.partition())
+            .groupBy(ReceiverRecord::partition)
             .flatMap(group -> group
+                .doOnNext(rec -> log.info("{}:: Started handling of event#{}", receiverName, rec.key()))
                 .concatMap(handlingFunction)
+                .doOnNext(rec -> log.info("{}:: Finished handling of event#{}", receiverName, rec.key()))
             )
             .subscribe();
     }
@@ -138,27 +150,22 @@ public class ReactorKafkaTestApplication {
         return Mono.just(record)
             .doOnNext(rec -> {
                 try {
-                    log.info("Started handling of event#{}", rec.key());
                     Thread.sleep(EVENT_HANDLING_TIME.toMillis());
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 } finally {
                     rec.receiverOffset().acknowledge();
-                    log.info("Finished handling of event#{}", rec.key());
                 }
             });
     }
 
     private Mono<ReceiverRecord<String, String>> handleWithMonoDelay(ReceiverRecord<String, String> record) {
-        log.info("Started handling of event#{}", record.key());
         return Mono.delay(EVENT_HANDLING_TIME)
             .map(x -> record)
-            .doOnNext(rec -> rec.receiverOffset().acknowledge())
-            .doOnNext(rec -> log.info("Finished handling of event#{}", rec.key()));
+            .doOnNext(rec -> rec.receiverOffset().acknowledge());
     }
 
     private Mono<ReceiverRecord<String, String>> handleWithMonoRetry(ReceiverRecord<String, String> record) {
-        log.info("Started handling of event#{}", record.key());
         return Mono.just(record)
             .flatMap(rec -> {
                 try {
@@ -176,8 +183,7 @@ public class ReactorKafkaTestApplication {
                 log.error("Failed to handle event#{}, publishing it to dead letter topic....", record.key());
                 return Mono.just(record);
             })
-            .doOnNext(rec -> rec.receiverOffset().acknowledge())
-            .doOnNext(rec -> log.info("Finished handling of event#{}", rec.key()));
+            .doOnNext(rec -> rec.receiverOffset().acknowledge());
     }
 
     private SenderRecord<String, String, String> createSenderRecord(long eventNumber) {
@@ -186,5 +192,4 @@ public class ReactorKafkaTestApplication {
         ProducerRecord<String, String> producerrecord = new ProducerRecord<>(TEST_KAFKA_TOPIC, key, value);
         return SenderRecord.create(producerrecord, key);
     }
-
 }
