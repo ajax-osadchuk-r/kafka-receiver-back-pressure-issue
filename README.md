@@ -10,10 +10,10 @@ You can skip it, if you already have custom Kafka deployed, but make sure to upd
 ## Steps to reproduce
 
 1. Open [ReactorKafkaTestApplication](src/main/java/com/example/reactorkafkatest/ReactorKafkaTestApplication.java) class
-2. In kafkaReceiversRunner choose one of reproducible Kafka event handling methods
+2. In kafkaReceiversRunner method choose one of reproducible Kafka event handling methods
 3. Start SpringBoot application
 4. Wait a bit till second receiver will be started
-5. Verify in logs DEBUG message "Rebalancing; waiting for N records in pipeline", where N is much more grater than
+5. Verify in logs DEBUG messages "Rebalancing; waiting for N records in pipeline", where N is much more grater than
    `max.poll.records` value. In my case it was ~260.
 6. Verify that some events were processed on both consumers after rebalance, 
    you can check it searching by event key (it is unique for each event in this app) in next log messages:
